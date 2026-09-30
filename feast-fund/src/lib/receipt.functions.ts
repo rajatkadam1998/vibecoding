@@ -1,4 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import Anthropic from "@anthropic-ai/sdk";
+import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { z } from "zod/v4";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 type ScannedReceipt = {
@@ -7,6 +10,16 @@ type ScannedReceipt = {
   tax: number;
   tip: number;
 };
+
+const ReceiptSchema = z.object({
+  restaurant: z.string().nullable(),
+  items: z.array(z.object({ name: z.string(), price: z.number() })),
+  tax: z.number(),
+  tip: z.number(),
+});
+
+const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+type SupportedType = (typeof SUPPORTED_TYPES)[number];
 
 /**
  * Reads a photo of a receipt and returns the line items it can find.
@@ -21,62 +34,56 @@ export const scanReceipt = createServerFn({ method: "POST" })
     return input;
   })
   .handler(async ({ data }): Promise<ScannedReceipt> => {
-    const apiKey = process.env["LOVABLE_API_KEY"];
-    if (!apiKey) throw new Error("Receipt scanning is not available right now.");
+    if (!process.env["ANTHROPIC_API_KEY"]) {
+      throw new Error("Receipt scanning is not available right now.");
+    }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3.8-flash",
+    const match = /^data:(image\/[a-z+]+);base64,(.+)$/.exec(data.imageDataUrl);
+    const mediaType = match?.[1] as SupportedType | undefined;
+    const imageData = match?.[2];
+    if (!mediaType || !imageData || !SUPPORTED_TYPES.includes(mediaType)) {
+      throw new Error("Use a JPEG, PNG, GIF or WebP photo of the receipt.");
+    }
+
+    const client = new Anthropic();
+
+    const response = await client.beta.messages
+      .parse({
+        model: "claude-opus-5-5",
+        max_tokens: 16000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: "medium", format: betaZodOutputFormat(ReceiptSchema) },
+        system:
+          "You read restaurant receipts. Prices are decimal numbers in the receipt currency. " +
+          "Exclude subtotal, total, tax and tip rows from items. If a value is missing use 0 or null.",
         messages: [
-          {
-            role: "system",
-            content:
-              "You read restaurant receipts. Reply with JSON only, no markdown fences, shaped exactly as " +
-              '{"restaurant": string|null, "items": [{"name": string, "price": number}], "tax": number, "tip": number}. ' +
-              "Prices are decimal numbers in the receipt currency. Exclude subtotal/total/tax/tip rows from items. " +
-              "If a value is missing use 0 or null.",
-          },
           {
             role: "user",
             content: [
+              { type: "image", source: { type: "base64", media_type: mediaType, data: imageData } },
               { type: "text", text: "Extract the line items, tax and tip from this receipt." },
-              { type: "image_url", image_url: { url: data.imageDataUrl } },
             ],
           },
         ],
-      }),
-    });
+      })
+      .catch((error: unknown) => {
+        console.error("Claude API error", error);
+        if (error instanceof Anthropic.RateLimitError) {
+          throw new Error("Too many scans right now — try again in a minute.");
+        }
+        throw new Error("Could not read that receipt. Try a clearer photo or add items by hand.");
+      });
 
-    if (!response.ok) {
-      console.error("AI gateway error", response.status, await response.text());
-      if (response.status === 429) throw new Error("Too many scans right now — try again in a minute.");
+    const parsed = response.stop_reason === "refusal" ? null : response.parsed_output;
+    if (!parsed) {
       throw new Error("Could not read that receipt. Try a clearer photo or add items by hand.");
     }
 
-    const payload = (await response.json()) as {
-      choices?: { message?: { content?: string } }[];
+    return {
+      restaurant: parsed.restaurant,
+      items: parsed.items.map((item) => ({ name: item.name, price: Number(item.price) || 0 })),
+      tax: Number(parsed.tax) || 0,
+      tip: Number(parsed.tip) || 0,
     };
-    const raw = payload.choices?.[0]?.message?.content ?? "";
-    const jsonText = raw.replace(/```json|```/g, "").trim();
-
-    try {
-      const parsed = JSON.parse(jsonText) as ScannedReceipt;
-      return {
-        restaurant: typeof parsed.restaurant === "string" ? parsed.restaurant : null,
-        items: Array.isArray(parsed.items)
-          ? parsed.items
-              .filter((item) => item && typeof item.name === "string")
-              .map((item) => ({ name: item.name, price: Number(item.price) || 0 }))
-          : [],
-        tax: Number(parsed.tax) || 0,
-        tip: Number(parsed.tip) || 0,
-      };
-    } catch {
-      throw new Error("Could not read that receipt. Try a clearer photo or add items by hand.");
-    }
   });

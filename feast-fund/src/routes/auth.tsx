@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -78,22 +77,25 @@ function AuthPage() {
 
   const google = async () => {
     setBusy(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+    // Supabase redirects to Google and back to /auth, where the listener above
+    // picks up the new session and moves on to /bills.
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}/auth` },
     });
-    if (result.error) {
+    if (error) {
       setBusy(false);
       toast.error("Google sign-in failed. Try again.");
-      return;
     }
-    if (result.redirected) return;
-    navigate({ to: "/bills" });
   };
 
   return (
     <main className="flex min-h-screen items-center justify-center px-5 py-12">
       <div className="w-full max-w-md">
-        <Link to="/" className="mb-8 block text-center text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          to="/"
+          className="mb-8 block text-center text-sm text-muted-foreground hover:text-foreground"
+        >
           ← Tab Split
         </Link>
         <div className="paper-card p-7">
@@ -104,8 +106,8 @@ function AuthPage() {
 
           {awaitingConfirm ? (
             <p className="mt-6 rounded-lg bg-secondary p-4 text-sm">
-              We sent a confirmation link to <strong>{email}</strong>. Open it, then come back here to
-              sign in.
+              We sent a confirmation link to <strong>{email}</strong>. Open it, then come back here
+              to sign in.
             </p>
           ) : (
             <>
@@ -113,7 +115,8 @@ function AuthPage() {
                 Continue with Google
               </Button>
               <div className="my-5 flex items-center gap-3 text-xs uppercase tracking-widest text-muted-foreground">
-                <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+                <span className="h-px flex-1 bg-border" /> or{" "}
+                <span className="h-px flex-1 bg-border" />
               </div>
               <form onSubmit={submit} className="space-y-4">
                 {mode === "signup" && (

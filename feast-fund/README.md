@@ -1,29 +1,32 @@
-# Welcome to your Lovable project
+# Tab Split (Feast Fund)
 
-This project was built with [Lovable](https://lovable.dev).
+Split a restaurant bill item by item: scan or type the receipt, tag each dish to the people who had it, and send everyone a link with their exact share. Originally built in Lovable; now developed independently.
 
-## Build with Lovable
+## Setup
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+You need Node.js (LTS), a free [Supabase](https://supabase.com) project, and an [Anthropic API key](https://platform.claude.com/settings/keys) for receipt scanning.
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+1. **Database** — in your Supabase dashboard, open the SQL editor, paste the contents of [`supabase/setup.sql`](supabase/setup.sql), and run it once.
+2. **Settings** — copy `.env.example` to `.env` and fill in your Supabase URL, publishable key and project id (Project Settings → API), plus `ANTHROPIC_API_KEY`.
+3. **Run**
 
-## Development
+   ```sh
+   npm install
+   npm run dev
+   ```
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+   The app runs at http://localhost:8080.
 
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
-```
+### Optional: Google sign-in
+
+Email/password works out of the box. For "Continue with Google", enable the Google provider in Supabase (Authentication → Sign In / Providers) with a Google OAuth client, and add `http://localhost:8080/auth` to Authentication → URL Configuration → Redirect URLs.
+
+## Database changes
+
+Migrations live in `supabase/migrations/`. Add new ones there with a later timestamp, then regenerate `supabase/setup.sql` for fresh installs.
 
 ## Built with
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+- TanStack Start, React, TypeScript, Tailwind CSS
+- Supabase (Postgres, auth, row-level security)
+- Claude API (receipt scanning)

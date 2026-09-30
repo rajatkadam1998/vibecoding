@@ -38,4 +38,4 @@ BEGIN
   WHERE id = _participant_id;
   RETURN true;
 END;
-$function$
+$function$;
