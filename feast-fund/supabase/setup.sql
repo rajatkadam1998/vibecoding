@@ -204,3 +204,27 @@ $function$;
 
 -- ===== 20260916140000_bills_is_draft.sql =====
 ALTER TABLE public.bills ADD COLUMN IF NOT EXISTS is_draft boolean NOT NULL DEFAULT false;
+
+-- ===== 20261006120000_friends.sql =====
+-- Each user's own list of friends, used to fill in people on a bill.
+CREATE TABLE public.friends (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  email text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX friends_user_id_idx ON public.friends(user_id);
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.friends TO authenticated;
+GRANT ALL ON public.friends TO service_role;
+ALTER TABLE public.friends ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "own friends" ON public.friends FOR ALL TO authenticated
+  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+
+-- ===== 20261006130000_friends_unique.sql =====
+-- No two friends in one user's list may share a name or an email (case-insensitive).
+CREATE UNIQUE INDEX friends_user_name_key ON public.friends (user_id, lower(btrim(name)));
+CREATE UNIQUE INDEX friends_user_email_key ON public.friends (user_id, lower(btrim(email)))
+  WHERE email IS NOT NULL;
+

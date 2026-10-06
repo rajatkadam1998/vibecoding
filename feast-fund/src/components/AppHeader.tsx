@@ -18,6 +18,13 @@ export function AppHeader({ name }: { name?: string | null }) {
         </Link>
         <div className="flex items-center gap-3">
           {name ? <span className="hidden text-sm text-muted-foreground sm:inline">{name}</span> : null}
+          <Link
+            to="/friends"
+            className="text-sm text-muted-foreground hover:text-foreground"
+            activeProps={{ className: "text-foreground" }}
+          >
+            Friends
+          </Link>
           <Button variant="ghost" size="sm" onClick={signOut}>
             Sign out
           </Button>

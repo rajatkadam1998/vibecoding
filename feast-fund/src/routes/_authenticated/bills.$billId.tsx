@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { scanReceipt } from "@/lib/receipt.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { AppHeader } from "@/components/AppHeader";
+import { FriendNameInput } from "@/components/FriendNameInput";
+import { duplicateFriendMessage, isDuplicateError, type Friend } from "@/lib/friends";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -103,19 +105,59 @@ function BillEditor() {
     onError: () => toast.error("Could not save that change"),
   });
 
-  const addPerson = useMutation({
-    mutationFn: async () => {
-      if (!newPerson.name.trim()) throw new Error("Add a name first");
-      const { error } = await supabase.from("participants").insert({
-        bill_id: billId,
-        name: newPerson.name.trim(),
-        email: newPerson.email.trim() || null,
-      });
+  const friends = useQuery({
+    queryKey: ["friends"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("friends").select("id, name, email").order("name");
+      if (error) throw error;
+      return data as Friend[];
+    },
+  });
+
+  const saveFriend = useMutation({
+    mutationFn: async (person: { name: string; email: string | null }) => {
+      const duplicate = duplicateFriendMessage(friends.data ?? [], person);
+      if (duplicate) throw new Error(duplicate);
+      const { error } = await supabase.from("friends").insert(person);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_, person) => {
+      toast.success(`${person.name} saved to your friends`);
+      queryClient.invalidateQueries({ queryKey: ["friends"] });
+    },
+    onError: (e) =>
+      toast.error(
+        isDuplicateError(e)
+          ? "That name or email is already in your friends."
+          : e instanceof Error
+            ? e.message
+            : "Could not save that friend",
+      ),
+  });
+
+  // `person` is set when a friend is picked from the suggestions; otherwise use the form.
+  const addPerson = useMutation({
+    mutationFn: async (person?: Friend) => {
+      const name = (person?.name ?? newPerson.name).trim();
+      const email = (person ? person.email : newPerson.email.trim()) || null;
+      if (!name) throw new Error("Add a name first");
+      const { error } = await supabase.from("participants").insert({ bill_id: billId, name, email });
+      if (error) throw error;
+      return { name, email, fromFriends: Boolean(person) };
+    },
+    onSuccess: (added) => {
       setNewPerson({ name: "", email: "" });
       refresh();
+      // Only offer to save people who wouldn't duplicate an existing friend.
+      const known = duplicateFriendMessage(friends.data ?? [], added) !== null;
+      if (!added.fromFriends && !known) {
+        toast(`Added ${added.name}`, {
+          action: {
+            label: "Save to friends",
+            onClick: () => saveFriend.mutate({ name: added.name, email: added.email }),
+          },
+        });
+      }
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not add that person"),
   });
@@ -327,6 +369,15 @@ function BillEditor() {
   const isMe = (person?: { email: string | null } | null) =>
     Boolean(person?.email && myEmail && person.email.toLowerCase() === myEmail.toLowerCase());
   const meOnBill = participants.some((p) => isMe(p));
+  // Don't suggest friends who are already on this bill.
+  const friendsNotOnBill = (friends.data ?? []).filter(
+    (f) =>
+      !participants.some((p) =>
+        f.email && p.email
+          ? f.email.toLowerCase() === p.email.toLowerCase()
+          : f.name.toLowerCase() === p.name.toLowerCase(),
+      ),
+  );
 
 
   const split = computeSplit(items, participants, bill.tax_cents, bill.tip_cents);
@@ -431,14 +482,16 @@ function BillEditor() {
             className="mt-4 flex flex-wrap gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              addPerson.mutate();
+              addPerson.mutate(undefined);
             }}
           >
-            <Input
+            <FriendNameInput
               className="w-40"
               placeholder="Name"
               value={newPerson.name}
-              onChange={(e) => setNewPerson({ ...newPerson, name: e.target.value })}
+              onChange={(name) => setNewPerson({ ...newPerson, name })}
+              friends={friendsNotOnBill}
+              onPick={(friend) => addPerson.mutate(friend)}
             />
             <Input
               className="w-56"
