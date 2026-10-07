@@ -233,6 +233,10 @@ export type Database = {
         Args: { _paid: boolean; _participant_id: string }
         Returns: boolean
       }
+      use_scan_credit: {
+        Args: { _daily_limit?: number }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

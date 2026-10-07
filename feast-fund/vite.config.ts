@@ -6,12 +6,48 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+const SUPABASE_HOST = "qlsydmeuwiruxfaqrocn.supabase.co";
+
+// Where the page may load things from. 'unsafe-inline' scripts are needed for the
+// framework's hydration data; everything else is limited to this site, Supabase and Google Fonts.
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  `connect-src 'self' https://${SUPABASE_HOST} wss://${SUPABASE_HOST}`,
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+].join("; ");
+
+// Passed to Nitro as-is; held in a variable because the wrapper's type only lists a few
+// Nitro options, though it forwards all of them (routeRules included).
+const nitro = {
+  // Deploy target: Vercel (the wrapper would otherwise default to Cloudflare).
+  preset: "vercel",
+  routeRules: {
+    "/**": {
+      headers: {
+        "X-Frame-Options": "DENY",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+        // Report-only while we confirm nothing legitimate is blocked; switch the name to
+        // "Content-Security-Policy" to enforce.
+        "Content-Security-Policy-Report-Only": contentSecurityPolicy,
+      },
+    },
+  },
+};
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  // Deploy target: Vercel (the wrapper would otherwise default to Cloudflare).
-  nitro: { preset: "vercel" },
+  nitro,
 });

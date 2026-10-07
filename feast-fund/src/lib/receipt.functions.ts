@@ -21,6 +21,8 @@ const ReceiptSchema = z.object({
 const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type SupportedType = (typeof SUPPORTED_TYPES)[number];
 
+const DAILY_SCAN_LIMIT = 20;
+
 /**
  * Reads a photo of a receipt and returns the line items it can find.
  * The image arrives as a data URL from the browser.
@@ -33,7 +35,7 @@ export const scanReceipt = createServerFn({ method: "POST" })
     }
     return input;
   })
-  .handler(async ({ data }): Promise<ScannedReceipt> => {
+  .handler(async ({ data, context }): Promise<ScannedReceipt> => {
     if (!process.env["ANTHROPIC_API_KEY"]) {
       throw new Error("Receipt scanning is not available right now.");
     }
@@ -43,6 +45,23 @@ export const scanReceipt = createServerFn({ method: "POST" })
     const imageData = match?.[2];
     if (!mediaType || !imageData || !SUPPORTED_TYPES.includes(mediaType)) {
       throw new Error("Use a JPEG, PNG, GIF or WebP photo of the receipt.");
+    }
+
+    // Each scan is a paid Claude call, so it spends one of the user's daily credits first.
+    // The database caps the limit at 20; SCAN_DAILY_LIMIT can only lower it (e.g. for testing).
+    const dailyLimit = Math.min(
+      Number(process.env["SCAN_DAILY_LIMIT"]) || DAILY_SCAN_LIMIT,
+      DAILY_SCAN_LIMIT,
+    );
+    const credit = await context.supabase.rpc("use_scan_credit", { _daily_limit: dailyLimit });
+    if (credit.error) {
+      console.error("Scan credit check failed", credit.error);
+      throw new Error("Receipt scanning is not available right now.");
+    }
+    if (!credit.data) {
+      throw new Error(
+        `You've used today's ${dailyLimit} receipt scans. Add items by hand, or try again tomorrow.`,
+      );
     }
 
     const client = new Anthropic();
