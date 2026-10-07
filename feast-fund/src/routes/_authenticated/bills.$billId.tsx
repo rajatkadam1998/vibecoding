@@ -2,7 +2,18 @@ import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { Camera, Check, Copy, Loader2, Mail, Plus, Trash2, Users } from "lucide-react";
+import { Camera, Check, Copy, Loader2, Mail, Plus, RefreshCw, Trash2, Users } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { scanReceipt } from "@/lib/receipt.functions";
 import { useServerFn } from "@tanstack/react-start";
@@ -91,10 +102,22 @@ function BillEditor() {
           auth.user?.email ??
           "Me",
       };
-
     },
   });
 
+  // A fresh random token (same 32-hex format as the database default) kills the old /s/ link.
+  const resetShareLink = useMutation({
+    mutationFn: async () => {
+      const share_token = crypto.randomUUID().replace(/-/g, "");
+      const { error } = await supabase.from("bills").update({ share_token }).eq("id", billId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Share link reset — the old link no longer works");
+      refresh();
+    },
+    onError: () => toast.error("Could not reset the share link"),
+  });
 
   const patchBill = useMutation({
     mutationFn: async (patch: Partial<Bill>) => {
@@ -108,7 +131,10 @@ function BillEditor() {
   const friends = useQuery({
     queryKey: ["friends"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("friends").select("id, name, email").order("name");
+      const { data, error } = await supabase
+        .from("friends")
+        .select("id, name, email")
+        .order("name");
       if (error) throw error;
       return data as Friend[];
     },
@@ -141,7 +167,9 @@ function BillEditor() {
       const name = (person?.name ?? newPerson.name).trim();
       const email = (person ? person.email : newPerson.email.trim()) || null;
       if (!name) throw new Error("Add a name first");
-      const { error } = await supabase.from("participants").insert({ bill_id: billId, name, email });
+      const { error } = await supabase
+        .from("participants")
+        .insert({ bill_id: billId, name, email });
       if (error) throw error;
       return { name, email, fromFriends: Boolean(person) };
     },
@@ -182,7 +210,6 @@ function BillEditor() {
   });
 
   const removePerson = useMutation({
-
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("participants").delete().eq("id", id);
       if (error) throw error;
@@ -204,7 +231,13 @@ function BillEditor() {
   });
 
   const patchItem = useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: { name?: string; price_cents?: number; is_shared?: boolean } }) => {
+    mutationFn: async ({
+      id,
+      patch,
+    }: {
+      id: string;
+      patch: { name?: string; price_cents?: number; is_shared?: boolean };
+    }) => {
       const { error } = await supabase.from("bill_items").update(patch).eq("id", id);
       if (error) throw error;
     },
@@ -327,7 +360,9 @@ function BillEditor() {
       }
       refresh();
       toast.success(
-        rows.length > 0 ? `Added ${rows.length} items from the receipt` : "No items found — add them by hand",
+        rows.length > 0
+          ? `Added ${rows.length} items from the receipt`
+          : "No items found — add them by hand",
       );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not read that receipt");
@@ -378,7 +413,6 @@ function BillEditor() {
           : f.name.toLowerCase() === p.name.toLowerCase(),
       ),
   );
-
 
   const split = computeSplit(items, participants, bill.tax_cents, bill.tip_cents);
   const shareUrl =
@@ -504,7 +538,6 @@ function BillEditor() {
               <Plus className="size-4" /> Add person
             </Button>
           </form>
-
         </section>
 
         {/* Items */}
@@ -582,7 +615,9 @@ function BillEditor() {
                 </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {participants.length === 0 && (
-                    <span className="text-xs text-muted-foreground">Add people to tag this item.</span>
+                    <span className="text-xs text-muted-foreground">
+                      Add people to tag this item.
+                    </span>
                   )}
                   {participants.map((person) => {
                     const on = item.participant_ids.includes(person.id);
@@ -599,7 +634,6 @@ function BillEditor() {
                         }
                       >
                         {isMe(person) ? "You" : person.name}
-
                       </button>
                     );
                   })}
@@ -645,28 +679,27 @@ function BillEditor() {
                 const x = participants.find((y) => y.id === p.participantId);
                 return x?.email && !isMe(x);
               }) && (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  const targets = split.people.filter((p) => {
-                    const x = participants.find((y) => y.id === p.participantId);
-                    return x?.email && !isMe(x);
-                  });
-                  targets.forEach((p, i) => {
-                    const email = participants.find((x) => x.id === p.participantId)!.email!;
-                    setTimeout(() => {
-                      window.location.href = requestMailto(billCtx, p, email);
-                    }, i * 400);
-                    markRequested.mutate(p.participantId);
-                  });
-                  toast.success(`Opening ${targets.length} request emails`);
-                }}
-              >
-                <Mail className="size-4" /> Send all requests
-              </Button>
-            )}
-
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const targets = split.people.filter((p) => {
+                      const x = participants.find((y) => y.id === p.participantId);
+                      return x?.email && !isMe(x);
+                    });
+                    targets.forEach((p, i) => {
+                      const email = participants.find((x) => x.id === p.participantId)!.email!;
+                      setTimeout(() => {
+                        window.location.href = requestMailto(billCtx, p, email);
+                      }, i * 400);
+                      markRequested.mutate(p.participantId);
+                    });
+                    toast.success(`Opening ${targets.length} request emails`);
+                  }}
+                >
+                  <Mail className="size-4" /> Send all requests
+                </Button>
+              )}
           </div>
           <div className="mt-4 space-y-3">
             {split.people.length === 0 && (
@@ -701,8 +734,7 @@ function BillEditor() {
                     <p className="text-xs text-muted-foreground">
                       {formatMoney(person.itemsCents, bill.currency)} items +{" "}
                       {formatMoney(person.taxCents + person.tipCents, bill.currency)} tax &amp; tip
-                      {requestedAt &&
-                        ` · requested ${new Date(requestedAt).toLocaleDateString()}`}
+                      {requestedAt && ` · requested ${new Date(requestedAt).toLocaleDateString()}`}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -744,7 +776,6 @@ function BillEditor() {
                           Copy message
                         </Button>
                       ))}
-
                   </div>
                 </div>
               );
@@ -758,7 +789,8 @@ function BillEditor() {
 
           {split.unassignedCents > 0 && (
             <p className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
-              {formatMoney(split.unassignedCents, bill.currency)} of items isn't tagged to anyone yet.
+              {formatMoney(split.unassignedCents, bill.currency)} of items isn't tagged to anyone
+              yet.
             </p>
           )}
 
@@ -770,7 +802,7 @@ function BillEditor() {
               </p>
             </div>
             {!bill.is_draft && (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="secondary"
                   onClick={() => {
@@ -785,6 +817,28 @@ function BillEditor() {
                     Open share page
                   </a>
                 </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" disabled={resetShareLink.isPending}>
+                      <RefreshCw className="size-4" /> Reset share link
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Reset the share link?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        The current link will stop working for everyone who has it. You'll get a new
+                        link to share with the people who should still see this bill.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => resetShareLink.mutate()}>
+                        Reset link
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             )}
           </div>
