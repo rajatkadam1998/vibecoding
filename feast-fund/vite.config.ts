@@ -35,9 +35,9 @@ const nitro = {
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
         "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
-        // Report-only while we confirm nothing legitimate is blocked; switch the name to
-        // "Content-Security-Policy" to enforce.
-        "Content-Security-Policy-Report-Only": contentSecurityPolicy,
+        // Enforced after a report-only run on the live site showed no violations.
+        // If a new feature loads something from another site, add it to the policy above.
+        "Content-Security-Policy": contentSecurityPolicy,
       },
     },
   },
