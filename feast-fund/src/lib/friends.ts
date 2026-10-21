@@ -1,4 +1,13 @@
-export type Friend = { id: string; name: string; email: string | null };
+export type Friend = {
+  id: string;
+  name: string;
+  email: string | null;
+  venmo_username?: string | null;
+  mobile_number?: string | null;
+};
+
+/** Columns to select whenever friends are loaded. */
+export const FRIEND_COLUMNS = "id, name, email, venmo_username, mobile_number";
 
 /**
  * Scores how well `query` matches `text` (higher is better, 0 = no match):

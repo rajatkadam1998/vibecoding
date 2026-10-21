@@ -138,6 +138,8 @@ export type Database = {
       }
       friends: {
         Row: {
+          mobile_number: string | null
+          venmo_username: string | null
           created_at: string
           email: string | null
           id: string
@@ -145,6 +147,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          mobile_number?: string | null
+          venmo_username?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -152,6 +156,8 @@ export type Database = {
           user_id?: string
         }
         Update: {
+          mobile_number?: string | null
+          venmo_username?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -162,6 +168,7 @@ export type Database = {
       }
       participants: {
         Row: {
+          venmo_requested_at: string | null
           bill_id: string
           created_at: string
           email: string | null
@@ -172,6 +179,7 @@ export type Database = {
           requested_at: string | null
         }
         Insert: {
+          venmo_requested_at?: string | null
           bill_id: string
           created_at?: string
           email?: string | null
@@ -182,6 +190,7 @@ export type Database = {
           requested_at?: string | null
         }
         Update: {
+          venmo_requested_at?: string | null
           bill_id?: string
           created_at?: string
           email?: string | null
@@ -203,18 +212,21 @@ export type Database = {
       }
       profiles: {
         Row: {
+          venmo_username: string | null
           created_at: string
           display_name: string | null
           id: string
           updated_at: string
         }
         Insert: {
+          venmo_username?: string | null
           created_at?: string
           display_name?: string | null
           id: string
           updated_at?: string
         }
         Update: {
+          venmo_username?: string | null
           created_at?: string
           display_name?: string | null
           id?: string
